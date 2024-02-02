@@ -115,10 +115,13 @@ class Camera_flowcell():
 
         img = cv2.imread(path)
         img = cv2.resize(img, (self.pic_lenght, self.pic_width))
+        
         # crop the image/delete boundary areas which are not needed
         cropped = img[0:2160, lower_x:upper_x]
+        
         # turns colored image into grayscale
         gray = cv2.cvtColor(cropped, cv2.COLOR_BGR2GRAY)
+        
         return gray
 
     def thresholding(self, gray_scale, window_size, additional_thresh, i):
@@ -155,7 +158,7 @@ class Camera_flowcell():
         # labeling the detected particles
         s = [[1, 1, 1], [1, 1, 1], [1, 1, 1]]
 
-        labeled, num_labels = nd.label(cleared, structure=s)  # type: ignore
+        labeled, num_labels = nd.label(cleared, structure=s)
 
         return labeled, cleared
 
@@ -181,12 +184,13 @@ class Camera_flowcell():
         gray_tri = self.readpicture(path_tri, lower_x, upper_x)
         plt.imsave(
             "Flowcell\\analysis_feedback\\gray_tri.png", gray_tri, cmap='gray')
+        
         # define windowsize for the local thresholding and the additional value for fine tuning of the threshold
         window_size = 155
         additional_thresh_tri = 40  # Default:40
 
         # thresholding of the picture to be analyzed
-        additional_thresh = 30  # Default:5.9, 30
+        additional_thresh = 30  # Default:30
 
         # actual thresholding of the two pictures
         j = 1
@@ -217,6 +221,8 @@ class Camera_flowcell():
         mean_pixel_tri_front = float(long_side[0])
         mean_pixel_tri_back = float(long_side[1])
 
+        # the lengths of the calibration markers on the 
+        # front and back side of the flowcell in microns
         length_tri_um_back = 1015
         length_tri_um_front = 1220 
 
@@ -243,12 +249,12 @@ class Camera_flowcell():
             # segmentation verbessern!
             D = nd.distance_transform_edt(labeled)
             localMax = peak_local_max(
-                D,  indices=False, min_distance=50, labels=labeled)              # Default:7
+                D,  indices=False, min_distance=50, labels=labeled)    # Default:50
             markers = nd.label(localMax, structure=np.ones((3, 3)))[
-                0]  # type: ignore
-            labels = watershed(-D, markers, mask=labeled)  # type: ignore
+                0]
+            labels = watershed(-D, markers, mask=labeled)
 
-            # colorize the thresholded picture to see the crystalls in different colors
+            # optional: colorize the thresholded picture to see the crystalls in different colors
             # img_col = color.label2rgb(labeled, bg_label=0)
 
             # overlay the thresholded picture over the original gray scale image to see if
@@ -299,21 +305,22 @@ class Camera_flowcell():
         count, division = np.histogram(
             dataframe['equivalent_diameter_area_microns'], bins=200, range=(0, 2000))  # Default 15
 
+
         delta_x = np.diff(division)
         division = np.delete(division, 0)
         n_total = len(dataframe.index)
+        
         dQ0 = np.divide(count, n_total)
-        # check = np.sum(dQ0)
         Q0 = np.cumsum(dQ0)
         q0 = np.divide(dQ0, delta_x)
         dx = np.divide(delta_x, 2)
         x_mean = np.subtract(division, dx)
-        x_m_2_dQ0 = np.multiply(np.square(x_mean), dQ0)
-        xm2_Q0 = np.sum(x_m_2_dQ0)
-        dQ3 = np.divide(x_m_2_dQ0, xm2_Q0)
+        
+        x_m_3_dQ0 = np.multiply(np.power(x_mean, 3), dQ0)
+        xm3_Q0 = np.sum(x_m_3_dQ0)
+        dQ3 = np.divide(x_m_3_dQ0, xm3_Q0)
         Q3 = np.cumsum(dQ3)
         q3 = np.divide(dQ3, delta_x)
-
 
         PSD_Data = pd.DataFrame({'x_mean': x_mean, 'Q0': Q0, 'q0': q0,
                                 'Q3': Q3, 'q3': q3, 'deltax': delta_x,
@@ -376,9 +383,11 @@ class Camera_flowcell():
         Steadystate_df = pd.DataFrame({'x10_mean': [0], 'x_10': [0],
                                        'x25_mean': [0], 'x_25': [0],
                                        'x50_mean': [0], 'x_50': [0],
-                                      'x75_mean': [0], 'x_75': [0],
+                                       'x75_mean': [0], 'x_75': [0],
                                        'x90_mean': [0], 'x_90': [0]})
-
+        
+        # tolerances of the x10, x25, x50, x75 and x90 values
+        # can be adjusted to the specific requirements of the process
         size_tolerance_x10 = 0.2
         size_tolerance_x25 = 0.15
         size_tolerance_x50 = 0.1
@@ -440,6 +449,7 @@ class Camera_flowcell():
             stat_t_end = time.time()
             stat_t_diff = stat_t_end-stat_t_start
             
+            # makes sure that the analysis loop takes at least 10 minutes
             if stat_t_diff < 600:
                 time.sleep(600-stat_t_diff)
             i += 1
@@ -474,7 +484,7 @@ class Event_Logger():
     def log(self, message=None, message_type=20,):
         """
         passes a message to the logger,
-        which prints it to the console and saves it to the log file
+        which prints it to the console and saves it to the log file.
 
         Args:
             message (str, optional): the message to be passed to the logger. Defaults to None.
@@ -486,12 +496,17 @@ class Event_Logger():
         self.Logger.log(message_type, message)
 
 
+
+# test functions
 if __name__ == "__main__":
+    
     main_index = True
     camera = Camera_flowcell(main_index)
     # camera.take_calibration_photo(25)
+    
     # total_start = time.time()
     # camera.take_video(25)
     PSD_Data, Stationary_Data, n_total = camera.particle_analysis()
     # total_end = time.time()
+    
     # self.Logger.log("TOTAL:" + str(total_end-total_start))
